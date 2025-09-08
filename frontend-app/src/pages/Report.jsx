@@ -1,14 +1,20 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UserAPI } from "../lib/api";
+import toast from "react-hot-toast";
+import WarningBanner from "../components/WarningBanner";
 
 export default function Report() {
   const [form, setForm] = useState({
-    title: "",
-    category: "Incident",
+    category: "OTHER",
     description: "",
-    location: "",
-    image: null,
+    area_name: "",
+    nearest_landmark: "",
+    address: "",
+    building_name: "",
+    floor_no: "",
+    phone_number: "",
+    image: null, // optional
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -16,14 +22,13 @@ export default function Report() {
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
 
-  // client-side validation
+  // validation (simple)
   const validate = () => {
     const e = {};
-    if (!form.title.trim()) e.title = "Title is required.";
-    if (form.title.length > 120) e.title = "Keep the title under 120 characters.";
-    if (form.description.trim().length < 10)
-      e.description = "Add at least 10 characters so we can triage.";
-    if (form.location.length > 140) e.location = "Location is too long.";
+    if (!form.description.trim()) e.description = "Description is required.";
+    if (!form.area_name.trim()) e.area_name = "Area name is required.";
+    if (form.phone_number && form.phone_number.length > 15)
+      e.phone_number = "Phone number is too long.";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -44,20 +49,10 @@ export default function Report() {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer?.files?.[0];
-    if (file) {
-      setForm((f) => ({ ...f, image: file }));
-    }
+    if (file) setForm((f) => ({ ...f, image: file }));
   }
-
-  function onDragOver(e) {
-    e.preventDefault();
-    setDragOver(true);
-  }
-
-  function onDragLeave(e) {
-    e.preventDefault();
-    setDragOver(false);
-  }
+  function onDragOver(e) { e.preventDefault(); setDragOver(true); }
+  function onDragLeave(e) { e.preventDefault(); setDragOver(false); }
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -68,54 +63,72 @@ export default function Report() {
       let data;
       if (form.image) {
         const fd = new FormData();
-        fd.append("title", form.title);
-        fd.append("category", form.category);
-        fd.append("description", form.description);
-        fd.append("location", form.location);
-        fd.append("image", form.image);
+        // append only non-empty fields
+        Object.entries(form).forEach(([k, v]) => {
+          if (v !== null && v !== "") fd.append(k, v);
+        });
         data = await UserAPI.submitReportForm(fd);
       } else {
+        // JSON payload with backend field names
         data = await UserAPI.submitReportJSON({
-          title: form.title,
+          description: form.description.trim(),
           category: form.category,
-          description: form.description,
-          location: form.location,
+          area_name: form.area_name.trim(),
+          nearest_landmark: form.nearest_landmark.trim() || null,
+          address: form.address.trim() || null,
+          building_name: form.building_name.trim() || null,
+          floor_no: form.floor_no.trim() || null,
+          phone_number: form.phone_number.trim() || null,
+          // latitude/longitude will be added server-side from the map later
         });
       }
 
       setSuccess({
-        token: data?.token || data?.tracking_token || null,
+        token: data?.reporter_token || data?.token || null,
         id: data?.id || data?.pk || null,
         message: "Report submitted successfully.",
       });
 
+      // toast
+      toast.success("Report submitted");
+
       setForm({
-        title: "",
-        category: "Incident",
+        category: "OTHER",
         description: "",
-        location: "",
+        area_name: "",
+        nearest_landmark: "",
+        address: "",
+        building_name: "",
+        floor_no: "",
+        phone_number: "",
         image: null,
       });
-      fileRef.current?.value && (fileRef.current.value = "");
+      if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
       setSuccess(null);
       setErrors((e) => ({ ...e, submit: err.message || "Submit failed" }));
+      // toast
+      toast.error(err.message || "Submit failed");
     } finally {
       setLoading(false);
     }
   }
 
-  const imagePreviewUrl = useMemo(() => {
-    if (!form.image) return null;
-    return URL.createObjectURL(form.image);
-  }, [form.image]);
+  const imagePreviewUrl = useMemo(
+    () => (form.image ? URL.createObjectURL(form.image) : null),
+    [form.image]
+  );
 
   return (
-    <section className="max-w-5xl mx-auto p-6">
+    <section className="max-w-5xl h-[100vh] mx-auto p-6">
       <h1 className="text-3xl font-bold mb-2">Create Report</h1>
-      <p className="text-gray-600 mb-6">
-        Tell us what happened.
-      </p>
+      <p className="text-gray-600 mb-6">Tell us what happened.</p>
+
+      <WarningBanner className="mb-6">
+        Submitting false reports wastes police time and may be an offense.
+        Reports are anonymous to the public, but each submission has an internal tracking ID
+        and can be investigated by authorities if required by law. All misuse is logged.
+      </WarningBanner>
 
       {/* success */}
       {success && (
@@ -152,79 +165,91 @@ export default function Report() {
 
       <form onSubmit={onSubmit} className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-5">
+          {/* Category (backend enums) */}
           <div>
-            <label className="block text-sm font-medium mb-1">Title</label>
+            <label className="block text-sm font-medium mb-1">Category</label>
+            <select
+              name="category"
+              value={form.category}
+              onChange={onChange}
+              className="w-full border rounded-xl p-3 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            >
+              <option value="DRUG_PEDDLING">Drug Peddling</option>
+              <option value="THEFT">Theft</option>
+              <option value="VIOLENCE">Violence</option>
+              <option value="OTHER">Other</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Choose the closest match.</p>
+          </div>
+
+          {/* Area name */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Area name *</label>
             <input
-              name="title"
-              value={form.title}
+              name="area_name"
+              value={form.area_name}
               onChange={onChange}
               className={`w-full border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 ${
-                errors.title ? "border-red-300" : "border-gray-300"
+                errors.area_name ? "border-red-300" : "border-gray-300"
               }`}
-              placeholder="e.g., Streetlight outage on 5th Ave"
+              placeholder="Neighborhood / street / locality"
               required
-              maxLength={120}
             />
-            <div className="flex justify-between mt-1">
-              <span className="text-xs text-gray-500">
-                Keep it short and specific.
-              </span>
-              <span className="text-xs text-gray-400">
-                {form.title.length}/120
-              </span>
-            </div>
-            {errors.title && (
-              <div className="text-xs text-red-600 mt-1">{errors.title}</div>
+            {errors.area_name && (
+              <div className="text-xs text-red-600 mt-1">{errors.area_name}</div>
             )}
+          </div>
+
+          {/* Optional location details */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Nearest landmark</label>
+              <input
+                name="nearest_landmark"
+                value={form.nearest_landmark}
+                onChange={onChange}
+                className="w-full border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 border-gray-300"
+                placeholder="Bus stop / school / temple (optional)"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Address</label>
+              <input
+                name="address"
+                value={form.address}
+                onChange={onChange}
+                className="w-full border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 border-gray-300"
+                placeholder="Street, City (optional)"
+              />
+            </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Category</label>
-              <select
-                name="category"
-                value={form.category}
-                onChange={onChange}
-                className="w-full border rounded-xl p-3 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              >
-                <option>Incident</option>
-                <option>Maintenance</option>
-                <option>Safety</option>
-                <option>Other</option>
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Choose the closest match.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Location</label>
+              <label className="block text-sm font-medium mb-1">Building name</label>
               <input
-                name="location"
-                value={form.location}
+                name="building_name"
+                value={form.building_name}
                 onChange={onChange}
-                className={`w-full border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 ${
-                  errors.location ? "border-red-300" : "border-gray-300"
-                }`}
-                placeholder="City, Area, Street"
-                maxLength={140}
+                className="w-full border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 border-gray-300"
+                placeholder="(optional)"
               />
-              <div className="flex justify-between mt-1">
-                <span className="text-xs text-gray-500">
-                  Add a landmark if possible.
-                </span>
-                <span className="text-xs text-gray-400">
-                  {form.location.length}/140
-                </span>
-              </div>
-              {errors.location && (
-                <div className="text-xs text-red-600 mt-1">{errors.location}</div>
-              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Floor no</label>
+              <input
+                name="floor_no"
+                value={form.floor_no}
+                onChange={onChange}
+                className="w-full border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 border-gray-300"
+                placeholder="(optional)"
+              />
             </div>
           </div>
 
+          {/* Description */}
           <div>
-            <label className="block text-sm font-medium mb-1">Description</label>
+            <label className="block text-sm font-medium mb-1">Description *</label>
             <textarea
               name="description"
               value={form.description}
@@ -233,6 +258,7 @@ export default function Report() {
                 errors.description ? "border-red-300" : "border-gray-300"
               }`}
               placeholder="What happened? When did you notice it? Any risks?"
+              required
             />
             <div className="flex justify-between mt-1">
               <span className="text-xs text-gray-500">
@@ -243,13 +269,29 @@ export default function Report() {
               </span>
             </div>
             {errors.description && (
-              <div className="text-xs text-red-600 mt-1">
-                {errors.description}
-              </div>
+              <div className="text-xs text-red-600 mt-1">{errors.description}</div>
+            )}
+          </div>
+
+          {/* Phone */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Phone (optional)</label>
+            <input
+              name="phone_number"
+              value={form.phone_number}
+              onChange={onChange}
+              className={`w-full border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                errors.phone_number ? "border-red-300" : "border-gray-300"
+              }`}
+              placeholder="Your phone number (optional)"
+            />
+            {errors.phone_number && (
+              <div className="text-xs text-red-600 mt-1">{errors.phone_number}</div>
             )}
           </div>
         </div>
 
+        {/* ASIDE — unchanged UI (image + disclaimer + buttons) */}
         <aside className="space-y-5">
           <div
             onDrop={onDrop}
@@ -323,21 +365,25 @@ export default function Report() {
           <button
             type="button"
             onClick={() => {
-                setForm({
-                title: "",
-                category: "Incident",
+              setForm({
+                category: "OTHER",
                 description: "",
-                location: "",
+                area_name: "",
+                nearest_landmark: "",
+                address: "",
+                building_name: "",
+                floor_no: "",
+                phone_number: "",
                 image: null,
-                });
-                if (fileRef.current) fileRef.current.value = "";
-                setErrors({});
-                setSuccess(null);
+              });
+              if (fileRef.current) fileRef.current.value = "";
+              setErrors({});
+              setSuccess(null);
             }}
             className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-700"
-            >
-                Cancel
-            </button>
+          >
+            Cancel
+          </button>
         </aside>
       </form>
     </section>
