@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AdminAPI } from "../lib/api";
 import { Stat, ListSkeleton } from "../components/Helpers";
+import WarningBanner from "../components/WarningBanner";
+import toast from "react-hot-toast";
 import { FcOpenedFolder } from "react-icons/fc";
 
 export default function Dashboard() {
@@ -10,31 +12,28 @@ export default function Dashboard() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // filters / query
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("All");
   const [status, setStatus] = useState("All");
-  const [ordering, setOrdering] = useState("-created");
+  const [ordering, setOrdering] = useState("-created_at"); // backend timestamp field
   const [page, setPage] = useState(1);
 
   const pageSize = 10;
 
+  // Map backend statuses to badge styles
   const statusBadge = (s = "") => {
-    const val = (s || "").toLowerCase();
-    if (val.includes("resolved") || val.includes("closed"))
-      return "bg-green-100 text-green-800 border-green-200";
-    if (val.includes("progress"))
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    if (val.includes("open") || val.includes("new"))
-      return "bg-amber-100 text-amber-800 border-amber-200";
+    const val = (s || "").toUpperCase();
+    if (val === "RESOLVED") return "bg-green-100 text-green-800 border-green-200";
+    if (val === "IN_PROCESS") return "bg-blue-100 text-blue-800 border-blue-200";
+    if (val === "PENDING") return "bg-amber-100 text-amber-800 border-amber-200";
     return "bg-gray-100 text-gray-800 border-gray-200";
   };
 
-  // fetcher
   async function load() {
     setLoading(true);
     setErr("");
     try {
-      // Try to pass common DRF query params; backend can ignore unknown ones
       const params = {
         search: q || undefined,
         category: category !== "All" ? category : undefined,
@@ -53,7 +52,9 @@ export default function Dashboard() {
         setCount(typeof data?.count === "number" ? data.count : (data?.results?.length || 0));
       }
     } catch (e) {
-      setErr(e.message || "Failed to load");
+      const msg = e.message || "Failed to load";
+      setErr(msg);
+      toast.error(`⚠️ ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -61,34 +62,38 @@ export default function Dashboard() {
 
   useEffect(() => {
     load();
-  }, [page, ordering]); // page/order refetch
+  }, [page, ordering]);
 
+  // Local refine (in case server doesn't filter)
   const filteredLocal = useMemo(() => {
     return items.filter((it) => {
       const matchesQ =
         !q ||
-        String(it.title || it.name || "")
-          .toLowerCase()
-          .includes(q.toLowerCase()) ||
-        String(it.description || "")
-          .toLowerCase()
-          .includes(q.toLowerCase());
+        String(it.area_name || "").toLowerCase().includes(q.toLowerCase()) ||
+        String(it.description || "").toLowerCase().includes(q.toLowerCase());
       const matchesCat = category === "All" || (it.category || "") === category;
-      const matchesStatus = status === "All" || (it.status || "").toLowerCase() === status.toLowerCase();
+      const matchesStatus = status === "All" || (it.status || "").toUpperCase() === status.toUpperCase();
       return matchesQ && matchesCat && matchesStatus;
     });
   }, [items, q, category, status]);
 
+  // quick stats based on backend statuses
+  const openCount = items.filter((x) => (x.status || "").toUpperCase() === "PENDING").length;
+  const inProcessCount = items.filter((x) => (x.status || "").toUpperCase() === "IN_PROCESS").length;
+
   return (
-    <section className="max-w-7xl mx-auto p-6 space-y-6">
+    <section className="max-w-7xl h-[100vh] mx-auto p-6 space-y-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl md:text-3xl font-bold pb-2">Dashboard</h1>
           <p className="text-gray-600">Monitor recent incidents and triage quickly.</p>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => load()}
+            onClick={() => {
+              toast.loading("Refreshing…", { id: "dash-refresh", duration: 700 });
+              load();
+            }}
             className="px-4 py-2 rounded-xl border bg-white hover:bg-gray-50"
           >
             Refresh
@@ -96,17 +101,17 @@ export default function Dashboard() {
         </div>
       </header>
 
+      <WarningBanner className="mb-4">
+        Reminder: Submitting false or misleading reports wastes police time and may be an offense.
+        Although reporters are anonymous publicly, each report has an internal ID and can be traced
+        by authorities if required by law. Misuse is logged.
+      </WarningBanner>
+
       {/* Stats */}
       <section className="grid sm:grid-cols-3 gap-4">
         <Stat title="Total (this page or count)" value={count} />
-        <Stat
-          title="Open"
-          value={items.filter((x) => (x.status || "").toLowerCase().includes("open")).length}
-        />
-        <Stat
-          title="In Progress"
-          value={items.filter((x) => (x.status || "").toLowerCase().includes("progress")).length}
-        />
+        <Stat title="Pending" value={openCount} />
+        <Stat title="In Process" value={inProcessCount} />
       </section>
 
       {/* Filters */}
@@ -115,7 +120,7 @@ export default function Dashboard() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search title/description…"
+            placeholder="Search area/description…"
             className="md:col-span-2 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200"
           />
           <select
@@ -124,10 +129,10 @@ export default function Dashboard() {
             className="border rounded-xl p-3"
           >
             <option>All</option>
-            <option>Incident</option>
-            <option>Maintenance</option>
-            <option>Safety</option>
-            <option>Other</option>
+            <option value="DRUG_PEDDLING">Drug Peddling</option>
+            <option value="THEFT">Theft</option>
+            <option value="VIOLENCE">Violence</option>
+            <option value="OTHER">Other</option>
           </select>
           <select
             value={status}
@@ -135,23 +140,21 @@ export default function Dashboard() {
             className="border rounded-xl p-3"
           >
             <option>All</option>
-            <option>Open</option>
-            <option>In Progress</option>
-            <option>Resolved</option>
-            <option>Closed</option>
+            <option value="PENDING">Pending</option>
+            <option value="IN_PROCESS">In Process</option>
+            <option value="RESOLVED">Resolved</option>
           </select>
           <select
             value={ordering}
-            onChange={(e) => {
-              setOrdering(e.target.value);
-            }}
+            onChange={(e) => setOrdering(e.target.value)}
             className="border rounded-xl p-3"
             title="Requires DRF ordering backend support"
           >
-            <option value="-created">Newest first</option>
-            <option value="created">Oldest first</option>
-            <option value="title">Title A→Z</option>
-            <option value="-title">Title Z→A</option>
+            <option value="-created_at">Newest first</option>
+            <option value="created_at">Oldest first</option>
+            {/* If you add an index on category/status you can also support these: */}
+            {/* <option value="category">Category A→Z</option>
+            <option value="-category">Category Z→A</option> */}
           </select>
         </div>
 
@@ -159,7 +162,7 @@ export default function Dashboard() {
           <button
             onClick={() => {
               setPage(1);
-              load(); // try server-side
+              load();
             }}
             className="px-4 py-2 rounded-xl bg-black text-white"
           >
@@ -170,7 +173,7 @@ export default function Dashboard() {
               setQ("");
               setCategory("All");
               setStatus("All");
-              setOrdering("-created");
+              setOrdering("-created_at");
               setPage(1);
               load();
             }}
@@ -207,24 +210,28 @@ export default function Dashboard() {
         {!loading && !err && filteredLocal.length > 0 && (
           <div className="divide-y">
             {filteredLocal.map((it) => (
-              <div
-                key={it.id}
-                className="px-4 py-3 grid md:grid-cols-12 gap-3 items-start"
-              >
+              <div key={it.id} className="px-4 py-3 grid md:grid-cols-12 gap-3 items-start">
                 <div className="md:col-span-6">
-                  <div className="font-medium">{it.title || "Untitled"}</div>
+                  {/* Primary: category — area_name */}
+                  <div className="font-medium">
+                    {(it.category || "—")} — {(it.area_name || "Unknown area")}
+                  </div>
+                  {/* Secondary: landmark / address */}
                   <div className="text-sm text-gray-600">
-                    {(it.category && `Category: ${it.category} · `) || ""}
-                    {it.location || ""}
+                    {it.nearest_landmark
+                      ? `Near: ${it.nearest_landmark}`
+                      : (it.address || "")}
                   </div>
                 </div>
+
                 <div className="md:col-span-3">
                   <span className={`text-sm px-2 py-1 rounded-full border ${statusBadge(it.status)}`}>
                     {it.status || "—"}
                   </span>
                 </div>
+
                 <div className="md:col-span-3 text-sm text-gray-600 md:text-right">
-                  {formatWhen(it.created_at || it.created || it.timestamp)}
+                  {formatWhen(it.created_at)}
                 </div>
               </div>
             ))}
@@ -234,9 +241,7 @@ export default function Dashboard() {
         {/* Pagination */}
         {!loading && !err && count > pageSize && (
           <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
-            <div className="text-sm text-gray-600">
-              Page {page}
-            </div>
+            <div className="text-sm text-gray-600">Page {page}</div>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -261,14 +266,14 @@ export default function Dashboard() {
 
 // format when - date/time 
 function formatWhen(dateLike) {
-    if (!dateLike) return "—";
-    const d = new Date(dateLike);
-    if (isNaN(d.getTime())) return "—";
-    const diff = (Date.now() - d.getTime()) / 1000;
-    if (diff < 60) return "Just now";
-    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-    const days = Math.floor(diff / 86400);
-    if (days <= 7) return `${days} day${days > 1 ? "s" : ""} ago`;
-    return d.toLocaleString();
+  if (!dateLike) return "—";
+  const d = new Date(dateLike);
+  if (isNaN(d.getTime())) return "—";
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return "Just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  const days = Math.floor(diff / 86400);
+  if (days <= 7) return `${days} day${days > 1 ? "s" : ""} ago`;
+  return d.toLocaleString();
 }
