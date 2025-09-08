@@ -54,6 +54,9 @@ export const UserAPI = {
     // multipart submit (with image)
     submitReportForm: (formData) =>
         api.post("/user-api/report/", formData).then(ok).catch(fail),
+
+    reportsByPhone: (phone) =>
+        api.get("/user-api/reports-by-phone/", { params: { phone } }).then(ok).catch(fail),
 };
 
 // Public tracking
