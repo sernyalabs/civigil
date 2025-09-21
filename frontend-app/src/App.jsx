@@ -4,6 +4,7 @@ import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Report from "./pages/Report";
 import Dashboard from "./pages/Dashboard";
+import Track from "./pages/Track";
 import Footer from "./components/Footer";
 
 export default function App() {
@@ -16,6 +17,8 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/report" element={<Report />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/track" element={<Track />} />
+          <Route path="/track/:token" element={<Track />} /> 
         </Routes>
       </main>
       <Footer />
