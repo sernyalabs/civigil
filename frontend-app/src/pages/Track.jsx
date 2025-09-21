@@ -50,7 +50,7 @@ export default function Track() {
   };
 
   return (
-    <section className="max-w-5xl mx-auto p-6 space-y-6">
+    <section className="max-w-5xl h-full mx-auto p-6 space-y-6">
       <header className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Track Report</h1>
@@ -65,13 +65,13 @@ export default function Track() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="Enter tracking token"
-            className="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-gray-200"
           />
           <div className="flex gap-3">
             <button
               onClick={() => fetchData(token)}
               disabled={!hasToken || loading}
-              className="px-4 py-2 rounded-xl bg-blue-600 text-white disabled:opacity-50"
+              className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50"
             >
               {loading ? "Loading…" : "Track"}
             </button>
@@ -143,7 +143,7 @@ export default function Track() {
                     onClick={() =>
                       navigator.clipboard?.writeText(data.token || data.tracking_token)
                     }
-                    className="text-sm text-blue-700 hover:underline"
+                    className="text-sm text-black hover:underline"
                   >
                     Copy token
                   </button>
@@ -172,7 +172,7 @@ export default function Track() {
                 <ol className="relative border-s border-gray-200 ms-3">
                   {data.history.map((ev, idx) => (
                     <li key={idx} className="mb-4 ms-4">
-                      <div className="absolute w-3 h-3 bg-blue-600 rounded-full mt-1.5 -start-1.5"></div>
+                      <div className="absolute w-3 h-3 bg-black rounded-full mt-1.5 -start-1.5"></div>
                       <time className="mb-1 text-xs text-gray-500 block">
                         {ev.timestamp || ev.time || ev.date || ""}
                       </time>
@@ -230,7 +230,7 @@ export default function Track() {
               </button>
               <button
                 onClick={() => navigate("/")}
-                className="w-full px-4 py-2 rounded-xl bg-blue-600 text-white"
+                className="w-full px-4 py-2 rounded-xl bg-black text-white"
               >
                 Back home
               </button>
