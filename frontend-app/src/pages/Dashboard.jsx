@@ -1,10 +1,25 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminAPI } from "../lib/api";
 import { Stat, ListSkeleton } from "../components/Helpers";
 import WarningBanner from "../components/WarningBanner";
 import toast from "react-hot-toast";
 import { FcOpenedFolder } from "react-icons/fc";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+// fix leaflet marker icons in bundlers
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+// bounds around
+const LOCATIONS = L.latLngBounds([27.1, 88.0], [27.9, 88.9]);
+const DEFAULT_CENTER = [27.3389, 88.6065];
 
 export default function Dashboard() {
   const [items, setItems] = useState([]);
@@ -20,6 +35,10 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
 
   const pageSize = 10;
+
+  // refs for map + markers
+  const mapRef = useRef(null);
+  const markerRefs = useRef({});
 
   // Map backend statuses to badge styles
   const statusBadge = (s = "") => {
@@ -81,8 +100,16 @@ export default function Dashboard() {
   const openCount = items.filter((x) => (x.status || "").toUpperCase() === "PENDING").length;
   const inProcessCount = items.filter((x) => (x.status || "").toUpperCase() === "IN_PROCESS").length;
 
+  // jump to marker
+  function focusMarker(it) {
+    if (!mapRef.current || !markerRefs.current[it.id]) return;
+    const marker = markerRefs.current[it.id];
+    mapRef.current.setView([it.latitude, it.longitude], 15, { animate: true });
+    marker.openPopup();
+  }
+
   return (
-    <section className="max-w-7xl h-[100vh] mx-auto p-6 space-y-6">
+    <section className="max-w-7xl h-full mx-auto p-6 space-y-6">
       <header className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold pb-2">Dashboard</h1>
@@ -184,6 +211,43 @@ export default function Dashboard() {
         </div>
       </section>
 
+      {/* Incident Map */}
+      <section className="rounded-2xl border overflow-hidden">
+        <div className="px-4 py-3 border-b bg-gray-50 font-semibold">Incident Map</div>
+        <div style={{ height: "400px", width: "100%" }}>
+          <MapContainer
+            center={DEFAULT_CENTER}
+            zoom={13}
+            style={{ height: "100%", width: "100%" }}
+            maxBounds={LOCATIONS}
+            maxBoundsViscosity={0.9}
+            className="rounded-none"
+          >
+            <TileLayer
+              // attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {filteredLocal
+              .filter((it) => it.latitude && it.longitude)
+              .map((it) => (
+                <Marker
+                  key={it.id}
+                  position={[it.latitude, it.longitude]}
+                >
+                  <Popup>
+                    <div className="text-sm">
+                      <div className="font-semibold">{it.category}</div>
+                      <div>{it.area_name || "Unknown area"}</div>
+                      <div className="text-xs text-gray-600">{it.status}</div>
+                      <div className="mt-1 text-xs">{it.description}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+          </MapContainer>
+        </div>
+      </section>
+
       {/* list/table */}
       <section className="rounded-2xl border overflow-hidden">
         <div className="px-4 py-3 border-b bg-gray-50 font-semibold">Recent Incidents</div>
@@ -210,7 +274,11 @@ export default function Dashboard() {
         {!loading && !err && filteredLocal.length > 0 && (
           <div className="divide-y">
             {filteredLocal.map((it) => (
-              <div key={it.id} className="px-4 py-3 grid md:grid-cols-12 gap-3 items-start">
+              <div 
+                key={it.id} 
+                className="px-4 py-3 grid md:grid-cols-12 gap-3 items-start" 
+                onClick={() => focusMarker(it)}
+              >
                 <div className="md:col-span-6">
                   {/* Primary: category — area_name */}
                   <div className="font-medium">

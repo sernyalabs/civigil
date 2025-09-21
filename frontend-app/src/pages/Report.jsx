@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UserAPI } from "../lib/api";
 import toast from "react-hot-toast";
 import WarningBanner from "../components/WarningBanner";
+import Map from "../components/Map";
 
 export default function Report() {
   const [form, setForm] = useState({
@@ -14,7 +15,9 @@ export default function Report() {
     building_name: "",
     floor_no: "",
     phone_number: "",
-    image: null, // optional
+    image: null,
+    latitude: null,
+    longitude: null,
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -79,7 +82,8 @@ export default function Report() {
           building_name: form.building_name.trim() || null,
           floor_no: form.floor_no.trim() || null,
           phone_number: form.phone_number.trim() || null,
-          // latitude/longitude will be added server-side from the map later
+          latitude: form.latitude,
+          longitude: form.longitude,
         });
       }
 
@@ -102,6 +106,8 @@ export default function Report() {
         floor_no: "",
         phone_number: "",
         image: null,
+        latitude: null,
+        longitude: null,
       });
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
@@ -120,7 +126,7 @@ export default function Report() {
   );
 
   return (
-    <section className="max-w-5xl h-[100vh] mx-auto p-6">
+    <section className="max-w-5xl h-full mx-auto p-6">
       <h1 className="text-3xl font-bold mb-2">Create Report</h1>
       <p className="text-gray-600 mb-6">Tell us what happened.</p>
 
@@ -165,6 +171,27 @@ export default function Report() {
 
       <form onSubmit={onSubmit} className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-5">
+          {/* Map picker */}
+          <div className="mb-8">
+            <label className="block text-sm font-medium mb-2">Select Location on Map *</label>
+            <div className="rounded-2xl overflow-hidden border">
+              <Map
+                onSelect={(latlng) =>
+                  setForm((f) => ({ ...f, latitude: latlng.lat, longitude: latlng.lng }))
+                }
+              />
+            </div>
+            {form.latitude && form.longitude ? (
+              <p className="text-sm text-green-700 mt-2">
+                📍 Location selected: <code>{form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}</code>
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500 mt-2">
+                📍 Click anywhere on the map to drop a marker.
+              </p>
+            )}
+          </div>
+
           {/* Category (backend enums) */}
           <div>
             <label className="block text-sm font-medium mb-1">Category</label>

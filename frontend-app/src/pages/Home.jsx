@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import { AdminAPI } from "../lib/api";
 import { Link, useNavigate } from "react-router-dom";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+// fallback center
+const DEFAULT_CENTER = [27.3389, 88.6065];
 
 const Home = () => {
   const [stats, setStats] = useState({ total: 0, recent: [] });
@@ -57,7 +70,7 @@ const Home = () => {
 
       {/* MAP PREVIEW + RECENT INCIDENTS */}
       <section className="grid md:grid-cols-3 gap-6">
-        {/* Map preview placeholder (no extra libraries) */}
+        {/* Map preview */}
         <div className="md:col-span-2 rounded-2xl border p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold">Map preview</h2>
@@ -69,14 +82,33 @@ const Home = () => {
             </button>
           </div>
 
-          <div className="aspect-[16/9] w-full rounded-xl border bg-gray-50 grid place-items-center">
-            <div className="text-gray-500 text-sm px-6 text-center">
-              Map preview area
-              <br />
-              <span className="text-xs">
-                (Optional) Add a map later with Leaflet/Google Maps
-              </span>
-            </div>
+          <div className="aspect-[16/9] w-full rounded-xl border overflow-hidden">
+            {!error && stats.recent.length > 0 ? (
+              <MapContainer
+                center={DEFAULT_CENTER}
+                zoom={13}
+                style={{ height: "100%", width: "100%" }}
+              >
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                {stats.recent
+                  .filter((it) => it.latitude && it.longitude)
+                  .map((it) => (
+                    <Marker key={it.id} position={[it.latitude, it.longitude]}>
+                      <Popup>
+                        <div className="text-sm">
+                          <div className="font-semibold">{it.category}</div>
+                          <div>{it.area_name || "Unknown area"}</div>
+                          <div className="text-xs text-gray-600">{it.status}</div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+              </MapContainer>
+            ) : (
+              <div className="grid place-items-center text-gray-500 text-sm h-full">
+                No incident locations yet.
+              </div>
+            )}
           </div>
 
           {/* Tiny “how to wire a map” hint */}
